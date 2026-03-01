@@ -6,6 +6,25 @@ A full-stack web application that uses deep learning to identify faces in real t
 
 ---
 
+## Screenshots
+
+### Dashboard
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Live Attendance
+![Live Attendance](docs/screenshots/live_attendance.png)
+
+### People Management
+![People](docs/screenshots/persons.png)
+
+### Register Person
+![Register Person](docs/screenshots/register_person.png)
+
+### Reports
+![Reports](docs/screenshots/reports.png)
+
+---
+
 ## Features
 
 - **Live Recognition** — MJPEG camera stream with real-time face detection and identification
