@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Face Attendance{% endblock %}
+{% block header %}Overview{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide">Total People</p>
+      <p class="text-3xl font-bold text-white mt-1">{{ total_persons }}</p>
+      <p class="text-xs text-slate-500 mt-1">registered</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide">Subjects</p>
+      <p class="text-3xl font-bold text-white mt-1">{{ total_subjects }}</p>
+      <p class="text-xs text-slate-500 mt-1">active</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide">Today</p>
+      <p class="text-3xl font-bold text-blue-400 mt-1">{{ today_count }}</p>
+      <p class="text-xs text-slate-500 mt-1">attendance marks</p>
+    </div>
+    <div class="stat-card">
+      <p class="text-xs text-slate-400 uppercase tracking-wide">Model</p>
+      <p class="text-3xl font-bold text-white mt-1">{{ encoding_count }}</p>
+      <p class="text-xs text-slate-500 mt-1">face encodings</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <div class="lg:col-span-2 card">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-white">Weekly Attendance</h2>
+        <span class="text-xs text-slate-400">Last 7 days</span>
+      </div>
+      <canvas id="weeklyChart" height="120"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-white">Quick Actions</h2>
+      </div>
+      <div class="space-y-2">
+        <a href="/live" class="action-btn bg-blue-600 hover:bg-blue-700">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Start Live Session
+        </a>
+        <a href="/persons/register" class="action-btn bg-slate-700 hover:bg-slate-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+          Register Person
+        </a>
+        <button onclick="trainModel()" class="action-btn bg-slate-700 hover:bg-slate-600 w-full">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          Retrain Model
+        </button>
+        <a href="/reports" class="action-btn bg-slate-700 hover:bg-slate-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Download Reports
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold text-white">Recent Sessions</h2>
+      <a href="/reports" class="text-xs text-blue-400 hover:text-blue-300">View all</a>
+    </div>
+    {% if recent_sessions %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-slate-400 border-b border-slate-700">
+            <th class="pb-2 text-left font-medium">Subject</th>
+            <th class="pb-2 text-left font-medium">Title</th>
+            <th class="pb-2 text-left font-medium">Date</th>
+            <th class="pb-2 text-left font-medium">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-800">
+          {% for s in recent_sessions %}
+          <tr class="hover:bg-slate-800/50 transition-colors">
+            <td class="py-2.5 text-slate-200">{{ s.subject.name if s.subject else '—' }}</td>
+            <td class="py-2.5 text-slate-400">{{ s.title or '—' }}</td>
+            <td class="py-2.5 text-slate-400 text-xs">{{ s.start_time.strftime('%d %b %Y, %H:%M') }}</td>
+            <td class="py-2.5">
+              <span class="px-2 py-0.5 rounded-full text-xs font-medium
+                {% if s.status == 'active' %}bg-green-500/10 text-green-400 border border-green-500/20
+                {% else %}bg-slate-700 text-slate-400{% endif %}">
+                {{ s.status }}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-slate-500 text-sm text-center py-8">No sessions yet. <a href="/live" class="text-blue-400 hover:underline">Start one now.</a></p>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+const labels = [{% for d in weekly_data %}"{{ d.date }}"{% if not loop.last %},{% endif %}{% endfor %}];
+const values = [{% for d in weekly_data %}{{ d.count }}{% if not loop.last %},{% endif %}{% endfor %}];
+
+new Chart(document.getElementById('weeklyChart'), {
+  type: 'bar',
+  data: {
+    labels: labels,
+    datasets: [{
+      label: 'Attendance Marks',
+      data: values,
+      backgroundColor: 'rgba(59,130,246,0.7)',
+      borderColor: 'rgba(59,130,246,1)',
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#1e293b' } },
+      y: { ticks: { color: '#94a3b8', font: { size: 11 }, stepSize: 1 }, grid: { color: '#1e293b' }, beginAtZero: true }
+    }
+  }
+});
+
+async function trainModel() {
+  showToast('Training model, please wait...', 'info');
+  const res = await fetch('/api/training/train', { method: 'POST' });
+  const data = await res.json();
+  if (res.ok) {
+    showToast(`Model trained: ${data.total_encodings} encodings from ${data.persons_trained} persons`, 'success');
+    setTimeout(() => location.reload(), 1500);
+  } else {
+    showToast('Training failed', 'error');
+  }
+}
+</script>
+{% endblock %}

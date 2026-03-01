@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}People — Face Attendance{% endblock %}
+{% block header %}People{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+    <div class="flex-1 max-w-sm">
+      <input id="search-input" type="text" placeholder="Search by name, ID or department..."
+        class="input-field w-full" oninput="searchPersons(this.value)" />
+    </div>
+    <a href="/persons/register" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+      + Register Person
+    </a>
+  </div>
+
+  <div id="persons-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    {% for p in persons %}
+    <div class="card hover:border-slate-600 transition-colors relative group" id="person-{{ p.id }}">
+      <div class="flex items-start gap-3">
+        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
+          {{ p.name[0].upper() }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-white text-sm truncate">{{ p.name }}</p>
+          <p class="text-xs text-slate-400 mt-0.5">{{ p.person_id }}</p>
+          {% if p.department %}
+          <p class="text-xs text-slate-500 mt-0.5">{{ p.department }}</p>
+          {% endif %}
+        </div>
+      </div>
+      <div class="mt-3 flex items-center justify-between">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full {% if p.face_count > 0 %}bg-green-500{% else %}bg-yellow-500{% endif %}"></span>
+          <span class="text-xs text-slate-400">{{ p.face_count }} samples</span>
+        </div>
+        <span class="px-2 py-0.5 rounded-full text-xs {% if p.is_active %}bg-green-500/10 text-green-400{% else %}bg-slate-700 text-slate-400{% endif %}">
+          {{ 'active' if p.is_active else 'inactive' }}
+        </span>
+      </div>
+      <div class="mt-3 pt-3 border-t border-slate-700 flex gap-2">
+        <button onclick="viewAttendance({{ p.id }}, '{{ p.name }}')" class="flex-1 text-xs text-slate-400 hover:text-blue-400 transition-colors">History</button>
+        <button onclick="exportPerson({{ p.id }})" class="flex-1 text-xs text-slate-400 hover:text-green-400 transition-colors">Export</button>
+        <button onclick="deletePerson({{ p.id }}, '{{ p.name }}')" class="flex-1 text-xs text-slate-400 hover:text-red-400 transition-colors">Delete</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-span-full text-center py-16 text-slate-500">
+      <p class="text-lg">No people registered yet.</p>
+      <a href="/persons/register" class="mt-2 inline-block text-blue-400 hover:underline text-sm">Register someone now</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div id="history-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+  <div class="bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+    <div class="flex items-center justify-between p-4 border-b border-slate-700">
+      <h3 class="font-semibold text-white" id="modal-title">Attendance History</h3>
+      <button onclick="closeModal()" class="text-slate-400 hover:text-white">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="modal-body" class="flex-1 overflow-y-auto p-4"></div>
+  </div>
+</div>
+
+<script>
+let searchTimer;
+function searchPersons(query) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(async () => {
+    const url = query ? `/api/persons?q=${encodeURIComponent(query)}` : '/api/persons';
+    const res = await fetch(url);
+    const persons = await res.json();
+    renderPersons(persons);
+  }, 300);
+}
+
+function renderPersons(persons) {
+  const grid = document.getElementById('persons-grid');
+  if (!persons.length) {
+    grid.innerHTML = '<div class="col-span-full text-center py-16 text-slate-500">No results found.</div>';
+    return;
+  }
+  grid.innerHTML = persons.map(p => `
+    <div class="card hover:border-slate-600 transition-colors" id="person-${p.id}">
+      <div class="flex items-start gap-3">
+        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
+          ${p.name[0].toUpperCase()}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-white text-sm truncate">${p.name}</p>
+          <p class="text-xs text-slate-400 mt-0.5">${p.person_id}</p>
+          ${p.department ? `<p class="text-xs text-slate-500 mt-0.5">${p.department}</p>` : ''}
+        </div>
+      </div>
+      <div class="mt-3 flex items-center justify-between">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full ${p.face_count > 0 ? 'bg-green-500' : 'bg-yellow-500'}"></span>
+          <span class="text-xs text-slate-400">${p.face_count} samples</span>
+        </div>
+        <span class="px-2 py-0.5 rounded-full text-xs ${p.is_active ? 'bg-green-500/10 text-green-400' : 'bg-slate-700 text-slate-400'}">
+          ${p.is_active ? 'active' : 'inactive'}
+        </span>
+      </div>
+      <div class="mt-3 pt-3 border-t border-slate-700 flex gap-2">
+        <button onclick="viewAttendance(${p.id}, '${p.name}')" class="flex-1 text-xs text-slate-400 hover:text-blue-400 transition-colors">History</button>
+        <button onclick="exportPerson(${p.id})" class="flex-1 text-xs text-slate-400 hover:text-green-400 transition-colors">Export</button>
+        <button onclick="deletePerson(${p.id}, '${p.name}')" class="flex-1 text-xs text-slate-400 hover:text-red-400 transition-colors">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function viewAttendance(personId, name) {
+  document.getElementById('modal-title').textContent = `${name} — Attendance History`;
+  document.getElementById('history-modal').classList.remove('hidden');
+  const res = await fetch(`/api/attendance/persons/${personId}/stats`);
+  const stats = await res.json();
+  document.getElementById('modal-body').innerHTML = `
+    <div class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-slate-900 rounded-lg p-3 text-center">
+          <p class="text-2xl font-bold text-blue-400">${stats.total_present}</p>
+          <p class="text-xs text-slate-400 mt-1">Sessions Attended</p>
+        </div>
+        <div class="bg-slate-900 rounded-lg p-3 text-center">
+          <p class="text-sm font-medium text-slate-200">${stats.last_seen ? new Date(stats.last_seen).toLocaleDateString() : 'Never'}</p>
+          <p class="text-xs text-slate-400 mt-1">Last Seen</p>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button onclick="exportPerson(${personId})" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors">
+          Export CSV
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function closeModal() {
+  document.getElementById('history-modal').classList.add('hidden');
+}
+
+function exportPerson(personId) {
+  window.location.href = `/api/attendance/persons/${personId}/export`;
+}
+
+async function deletePerson(personId, name) {
+  if (!confirm(`Delete ${name}? This will remove all their face data and attendance records.`)) return;
+  const res = await fetch(`/api/persons/${personId}`, { method: 'DELETE' });
+  if (res.ok) {
+    document.getElementById(`person-${personId}`)?.remove();
+    showToast(`${name} removed`, 'success');
+  } else {
+    showToast('Delete failed', 'error');
+  }
+}
+</script>
+{% endblock %}

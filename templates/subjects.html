@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Subjects — Face Attendance{% endblock %}
+{% block header %}Subjects{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+  <div class="flex items-center justify-between">
+    <p class="text-sm text-slate-400">{{ subjects|length }} subject{{ 's' if subjects|length != 1 else '' }}</p>
+    <button onclick="openAddModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+      + Add Subject
+    </button>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for s in subjects %}
+    <div class="card" id="subject-{{ s.id }}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-white text-sm truncate">{{ s.name }}</p>
+          <p class="text-xs text-blue-400 font-mono mt-0.5">{{ s.code }}</p>
+          {% if s.instructor %}
+          <p class="text-xs text-slate-400 mt-1">{{ s.instructor }}</p>
+          {% endif %}
+          {% if s.description %}
+          <p class="text-xs text-slate-500 mt-1 line-clamp-2">{{ s.description }}</p>
+          {% endif %}
+        </div>
+        <span class="px-2 py-0.5 rounded-full text-xs flex-shrink-0
+          {% if s.is_active %}bg-green-500/10 text-green-400{% else %}bg-slate-700 text-slate-400{% endif %}">
+          {{ 'active' if s.is_active else 'inactive' }}
+        </span>
+      </div>
+      <div class="mt-3 pt-3 border-t border-slate-700 flex gap-3">
+        <button onclick="editSubject({{ s.id }}, '{{ s.name }}', '{{ s.code }}', '{{ s.instructor or '' }}', '{{ s.description or '' }}')"
+          class="text-xs text-slate-400 hover:text-blue-400 transition-colors">Edit</button>
+        <button onclick="toggleSubject({{ s.id }}, {{ 'false' if s.is_active else 'true' }})"
+          class="text-xs text-slate-400 hover:text-yellow-400 transition-colors">
+          {{ 'Deactivate' if s.is_active else 'Activate' }}
+        </button>
+        <button onclick="deleteSubject({{ s.id }}, '{{ s.name }}')"
+          class="text-xs text-slate-400 hover:text-red-400 transition-colors">Delete</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-span-full text-center py-16 text-slate-500">
+      <p class="text-lg">No subjects yet.</p>
+      <button onclick="openAddModal()" class="mt-2 text-blue-400 hover:underline text-sm">Add the first subject</button>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div id="subject-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+  <div class="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md">
+    <div class="flex items-center justify-between p-4 border-b border-slate-700">
+      <h3 class="font-semibold text-white" id="modal-title">Add Subject</h3>
+      <button onclick="closeModal()" class="text-slate-400 hover:text-white">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="subject-form" class="p-4 space-y-4">
+      <input type="hidden" id="edit-id" value="" />
+      <div>
+        <label class="field-label">Subject Name *</label>
+        <input id="f-name" type="text" required class="input-field w-full" placeholder="Machine Learning" />
+      </div>
+      <div>
+        <label class="field-label">Code *</label>
+        <input id="f-code" type="text" required class="input-field w-full" placeholder="CS501" />
+      </div>
+      <div>
+        <label class="field-label">Instructor</label>
+        <input id="f-instructor" type="text" class="input-field w-full" placeholder="Dr. Smith" />
+      </div>
+      <div>
+        <label class="field-label">Description</label>
+        <textarea id="f-desc" class="input-field w-full h-20 resize-none" placeholder="Brief description..."></textarea>
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openAddModal() {
+  document.getElementById('modal-title').textContent = 'Add Subject';
+  document.getElementById('edit-id').value = '';
+  ['name','code','instructor','desc'].forEach(k => document.getElementById(`f-${k}`).value = '');
+  document.getElementById('subject-modal').classList.remove('hidden');
+}
+
+function editSubject(id, name, code, instructor, desc) {
+  document.getElementById('modal-title').textContent = 'Edit Subject';
+  document.getElementById('edit-id').value = id;
+  document.getElementById('f-name').value = name;
+  document.getElementById('f-code').value = code;
+  document.getElementById('f-instructor').value = instructor;
+  document.getElementById('f-desc').value = desc;
+  document.getElementById('subject-modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('subject-modal').classList.add('hidden');
+}
+
+document.getElementById('subject-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const editId = document.getElementById('edit-id').value;
+  const body = {
+    name: document.getElementById('f-name').value,
+    code: document.getElementById('f-code').value,
+    instructor: document.getElementById('f-instructor').value || null,
+    description: document.getElementById('f-desc').value || null,
+  };
+  const url = editId ? `/api/subjects/${editId}` : '/api/subjects';
+  const method = editId ? 'PUT' : 'POST';
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) {
+    showToast(editId ? 'Subject updated' : 'Subject added', 'success');
+    closeModal();
+    setTimeout(() => location.reload(), 500);
+  } else {
+    const err = await res.json();
+    showToast(err.detail || 'Error', 'error');
+  }
+});
+
+async function toggleSubject(id, newActive) {
+  const res = await fetch(`/api/subjects/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active: newActive }),
+  });
+  if (res.ok) {
+    location.reload();
+  }
+}
+
+async function deleteSubject(id, name) {
+  if (!confirm(`Delete subject "${name}"? All associated sessions will also be removed.`)) return;
+  const res = await fetch(`/api/subjects/${id}`, { method: 'DELETE' });
+  if (res.ok) {
+    document.getElementById(`subject-${id}`)?.remove();
+    showToast(`"${name}" deleted`, 'success');
+  } else {
+    showToast('Delete failed', 'error');
+  }
+}
+</script>
+{% endblock %}

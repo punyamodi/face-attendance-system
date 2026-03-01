@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Register Person — Face Attendance{% endblock %}
+{% block header %}Register New Person{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+
+  <div class="card">
+    <h2 class="text-sm font-semibold text-white mb-4">Person Details</h2>
+    <form id="person-form" class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="field-label">Full Name *</label>
+          <input name="name" type="text" required class="input-field w-full" placeholder="John Doe" />
+        </div>
+        <div>
+          <label class="field-label">Person ID *</label>
+          <input name="person_id" type="text" required class="input-field w-full" placeholder="STU001" />
+        </div>
+        <div>
+          <label class="field-label">Department</label>
+          <input name="department" type="text" class="input-field w-full" placeholder="Computer Science" />
+        </div>
+        <div>
+          <label class="field-label">Email</label>
+          <input name="email" type="email" class="input-field w-full" placeholder="john@example.com" />
+        </div>
+      </div>
+      <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+        Create Profile
+      </button>
+    </form>
+  </div>
+
+  <div id="face-capture-section" class="hidden card">
+    <h2 class="text-sm font-semibold text-white mb-1">Capture Face Samples</h2>
+    <p class="text-xs text-slate-400 mb-4">Position face clearly in frame. Capture at least 5 samples from different angles.</p>
+
+    <div class="flex flex-col items-center gap-4">
+      <div class="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-700" style="width:480px;max-width:100%;aspect-ratio:4/3">
+        <video id="webcam" autoplay playsinline class="w-full h-full object-cover"></video>
+        <canvas id="overlay" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+        <div id="cam-placeholder" class="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">
+          Camera not started
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button onclick="startCamera()" id="start-cam-btn" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors">
+          Start Camera
+        </button>
+        <button onclick="captureFrame()" id="capture-btn" disabled class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm rounded-lg transition-colors">
+          Capture Sample
+        </button>
+        <button onclick="autoCapture()" id="auto-btn" disabled class="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white text-sm rounded-lg transition-colors">
+          Auto Capture (5x)
+        </button>
+      </div>
+
+      <div id="sample-counter" class="text-xs text-slate-400">0 samples captured</div>
+
+      <div id="sample-grid" class="flex flex-wrap gap-2 justify-center"></div>
+
+      <div id="upload-section" class="w-full border-t border-slate-700 pt-4">
+        <p class="text-xs text-slate-400 mb-2 text-center">Or upload photos</p>
+        <input type="file" id="file-upload" accept="image/*" multiple class="hidden" onchange="uploadFiles(this)" />
+        <label for="file-upload" class="block text-center cursor-pointer px-4 py-3 border-2 border-dashed border-slate-600 hover:border-slate-500 rounded-lg text-sm text-slate-400 hover:text-slate-300 transition-colors">
+          Click to upload photos
+        </label>
+      </div>
+
+      <button onclick="finalizePerson()" id="finalize-btn" disabled class="w-full px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors">
+        Save Person & Train Model
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let personId = null;
+let stream = null;
+let capturedFrames = [];
+
+document.getElementById('person-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = Object.fromEntries(fd.entries());
+  const res = await fetch('/api/persons', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) {
+    const person = await res.json();
+    personId = person.id;
+    showToast(`Profile created for ${person.name}`, 'success');
+    document.getElementById('face-capture-section').classList.remove('hidden');
+    document.getElementById('person-form').closest('.card').classList.add('opacity-60', 'pointer-events-none');
+  } else {
+    const err = await res.json();
+    showToast(err.detail || 'Failed to create profile', 'error');
+  }
+});
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+    document.getElementById('webcam').srcObject = stream;
+    document.getElementById('cam-placeholder').classList.add('hidden');
+    document.getElementById('capture-btn').disabled = false;
+    document.getElementById('auto-btn').disabled = false;
+    showToast('Camera started', 'success');
+  } catch (err) {
+    showToast('Camera access denied: ' + err.message, 'error');
+  }
+}
+
+function captureFrame() {
+  const video = document.getElementById('webcam');
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const b64 = canvas.toDataURL('image/jpeg', 0.85);
+  capturedFrames.push(b64);
+  addThumbnail(b64);
+  updateCounter();
+}
+
+async function autoCapture() {
+  const btn = document.getElementById('auto-btn');
+  btn.disabled = true;
+  btn.textContent = 'Capturing...';
+  for (let i = 0; i < 5; i++) {
+    captureFrame();
+    await new Promise(r => setTimeout(r, 600));
+  }
+  btn.disabled = false;
+  btn.textContent = 'Auto Capture (5x)';
+  document.getElementById('finalize-btn').disabled = capturedFrames.length === 0;
+}
+
+function addThumbnail(b64) {
+  const grid = document.getElementById('sample-grid');
+  const img = document.createElement('img');
+  img.src = b64;
+  img.className = 'w-16 h-16 rounded-lg object-cover border border-slate-600';
+  grid.appendChild(img);
+  document.getElementById('finalize-btn').disabled = false;
+}
+
+function updateCounter() {
+  document.getElementById('sample-counter').textContent = `${capturedFrames.length} sample${capturedFrames.length !== 1 ? 's' : ''} captured`;
+}
+
+async function uploadFiles(input) {
+  const fd = new FormData();
+  for (const f of input.files) fd.append('files', f);
+  const res = await fetch(`/api/persons/${personId}/photos`, { method: 'POST', body: fd });
+  if (res.ok) {
+    const data = await res.json();
+    showToast(data.message, 'success');
+    document.getElementById('finalize-btn').disabled = false;
+    for (const f of input.files) {
+      const reader = new FileReader();
+      reader.onload = e => addThumbnail(e.target.result);
+      reader.readAsDataURL(f);
+    }
+  } else {
+    showToast('Upload failed', 'error');
+  }
+}
+
+async function finalizePerson() {
+  const btn = document.getElementById('finalize-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  if (capturedFrames.length > 0) {
+    const res = await fetch(`/api/persons/${personId}/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frames: capturedFrames }),
+    });
+    if (!res.ok) {
+      showToast('Failed to save frames', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Save Person & Train Model';
+      return;
+    }
+  }
+  btn.textContent = 'Training model...';
+  await fetch('/api/training/train', { method: 'POST' });
+  showToast('Person registered and model trained successfully!', 'success');
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  setTimeout(() => window.location.href = '/persons', 1500);
+}
+</script>
+{% endblock %}
